@@ -1,0 +1,17 @@
+{
+  "dashboard": {
+    "title": "User Order Platform Metrics",
+    "panels": [
+      {
+        "type": "graph",
+        "title": "CPU Usage",
+        "targets": []
+      },
+      {
+        "type": "graph",
+        "title": "Memory Usage",
+        "targets": []
+      }
+    ]
+  }
+}
