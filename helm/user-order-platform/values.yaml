@@ -23,24 +23,14 @@ frontend:
     limits:
       memory: "256Mi"
       cpu: "200m"
+  env:
+    REACT_APP_API_URL: http://backend
 
 ingress:
-  enabled: true
-  className: "nginx"
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-  hosts:
-    - host: "user-order-platform.example.com"
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: user-order-platform-tls
-      hosts:
-        - user-order-platform.example.com
+  enabled: false
 
 # Environment variables for backend
 env:
   MONGO_URL: "mongodb+srv://srirammudrageda0_db_user:3cimCRXeTFHiQ7na@cluster0.foizjs7.mongodb.net/?appName=Cluster0"
   JWT_SECRET: "" # Set via secrets
-  FRONTEND_URL: "https://cloud-native-user-order-platform.vercel.app"
+  FRONTEND_URL: "http://localhost:30091"
