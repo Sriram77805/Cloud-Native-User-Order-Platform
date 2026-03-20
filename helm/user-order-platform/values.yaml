@@ -1,0 +1,46 @@
+backend:
+  image: docker.io/sriram77805/backend-app
+  tag: latest
+  port: 3000
+  replicas: 2
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+frontend:
+  image: docker.io/sriram77805/frontend-app
+  tag: latest
+  port: 80
+  replicas: 2
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: "user-order-platform.example.com"
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: user-order-platform-tls
+      hosts:
+        - user-order-platform.example.com
+
+# Environment variables for backend
+env:
+  MONGO_URL: "mongodb+srv://srirammudrageda0_db_user:3cimCRXeTFHiQ7na@cluster0.foizjs7.mongodb.net/?appName=Cluster0"
+  JWT_SECRET: "" # Set via secrets
+  FRONTEND_URL: "https://cloud-native-user-order-platform.vercel.app"
