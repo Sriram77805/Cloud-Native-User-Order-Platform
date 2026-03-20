@@ -3,9 +3,9 @@ name: CI-CD Pipeline
 on:
   push:
     branches: [main]
-    
+
 permissions:
-  contents: read
+  contents: write
   security-events: write
 
 env:
@@ -53,29 +53,34 @@ jobs:
     needs: build
 
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Run Trivy Scan (Backend)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
-          format: 'sarif'
-          output: 'backend-trivy-results.sarif'
+          format: sarif
+          output: backend-trivy-results.sarif
 
       - name: Upload Backend Scan Results
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'backend-trivy-results.sarif'
+          sarif_file: backend-trivy-results.sarif
+          category: backend
 
       - name: Run Trivy Scan (Frontend)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
-          format: 'sarif'
-          output: 'frontend-trivy-results.sarif'
+          format: sarif
+          output: frontend-trivy-results.sarif
 
       - name: Upload Frontend Scan Results
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'frontend-trivy-results.sarif'
+          sarif_file: frontend-trivy-results.sarif
+          category: frontend
 
   update-helm:
     runs-on: ubuntu-latest
@@ -94,5 +99,5 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add helm/user-order-platform/values.yaml
-          git commit -m "Update image tag to ${{ github.sha }}"
+          git commit -m "Update image tag to ${{ github.sha }}" || echo "No changes to commit"
           git push
