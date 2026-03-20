@@ -31,6 +31,6 @@ ingress:
 
 # Environment variables for backend
 env:
-  MONGO_URL: "mongodb+srv://srirammudrageda0_db_user:3cimCRXeTFHiQ7na@cluster0.foizjs7.mongodb.net/?appName=Cluster0"
+  MONGO_URL: "mongodb+srv://Sriram77805:Sri9866677805@cluster0.foizjs7.mongodb.net/orderdb?retryWrites=true&w=majority"
   JWT_SECRET: "" # Set via secrets
   FRONTEND_URL: "http://localhost:30091"
