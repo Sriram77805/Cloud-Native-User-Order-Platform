@@ -1,6 +1,6 @@
 backend:
   image: docker.io/sriram77805/backend-app
-  tag: latest
+  tag: "fe60ca6d63607e387b91168bf1abcdfc96112088"
   port: 3000
   replicas: 2
   resources:
@@ -13,7 +13,7 @@ backend:
 
 frontend:
   image: docker.io/sriram77805/frontend-app
-  tag: latest
+  tag: "fe60ca6d63607e387b91168bf1abcdfc96112088"
   port: 80
   replicas: 2
   resources:
