@@ -1,6 +1,6 @@
 backend:
   image: docker.io/sriram77805/backend-app
-  tag: "latest" # overridden per-deploy by CI with the immutable git SHA
+  tag: "272a41c2e7c5f97cdcb090fd07de7dc8382c178e"
   port: 5000
   replicas: 2
   minReplicas: 2
@@ -15,7 +15,7 @@ backend:
 
 frontend:
   image: docker.io/sriram77805/frontend-app
-  tag: "latest"
+  tag: "272a41c2e7c5f97cdcb090fd07de7dc8382c178e"
   port: 8080
   replicas: 2
   minReplicas: 2
