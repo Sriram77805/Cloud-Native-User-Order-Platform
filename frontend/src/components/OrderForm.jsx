@@ -1,32 +1,37 @@
-import React, { useState } from 'react';
-import { orderService } from '../services/api';
+import React, { useState } from "react";
+import { orderService } from "../services/api";
+import { useToast } from "../context/ToastContext";
 
 function OrderForm({ onOrderCreated }) {
-  const [product, setProduct] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [price, setPrice] = useState('');
+  const [product, setProduct] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [price, setPrice] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
+  const { pushToast } = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
 
-    if (!product || !quantity || !price) {
-      setError('All fields are required');
+    const qty = parseInt(quantity, 10);
+    const prc = parseFloat(price);
+
+    if (!product.trim() || !Number.isInteger(qty) || qty < 1 || !(prc > 0)) {
+      setError("Enter a product name, a quantity of at least 1, and a price greater than 0");
       return;
     }
 
     setLoading(true);
-
     try {
-      const response = await orderService.createOrder(product, parseInt(quantity), parseFloat(price));
-      onOrderCreated(response.data.order);
-      setProduct('');
-      setQuantity('');
-      setPrice('');
+      const { data } = await orderService.createOrder(product.trim(), qty, prc);
+      pushToast(`Order ${data.order.orderNumber} created`, "success");
+      onOrderCreated(data.order);
+      setProduct("");
+      setQuantity("");
+      setPrice("");
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to create order');
+      setError(err.response?.data?.error || "Failed to create order");
     } finally {
       setLoading(false);
     }
@@ -37,7 +42,7 @@ function OrderForm({ onOrderCreated }) {
       <div className="card">
         <h3 className="text-2xl font-bold text-gray-900 mb-6">Create New Order</h3>
         {error && <div className="error-alert mb-6">{error}</div>}
-        
+
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label htmlFor="product" className="block text-gray-900 font-semibold mb-2">Product Name</label>
@@ -47,6 +52,7 @@ function OrderForm({ onOrderCreated }) {
               value={product}
               onChange={(e) => setProduct(e.target.value)}
               placeholder="Enter product name"
+              maxLength={200}
               className="input-field"
             />
           </div>
@@ -60,6 +66,7 @@ function OrderForm({ onOrderCreated }) {
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 min="1"
+                step="1"
                 placeholder="Enter quantity"
                 className="input-field"
               />
@@ -81,7 +88,7 @@ function OrderForm({ onOrderCreated }) {
           </div>
 
           <button type="submit" disabled={loading} className="btn-primary w-full">
-            {loading ? 'Creating...' : 'Create Order'}
+            {loading ? "Creating..." : "Create Order"}
           </button>
         </form>
       </div>

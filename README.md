@@ -1,113 +1,88 @@
-# Cloud Native CI/CD Platform
+# Cloud Native Order Management Platform (v2)
 
-A complete cloud-native application platform with Node.js backend, React frontend, Kubernetes orchestration, and automated CI/CD pipelines.
+A hardened, feature-complete order management platform: Node.js/Express API,
+React frontend, MongoDB, real-time updates, analytics, Kubernetes/Helm,
+Terraform, and a gated CI/CD pipeline.
+
+This is a security- and bug-fix pass over the original version of this repo.
+See [`CHANGES.md`](./CHANGES.md) for the full list of what was fixed and why.
+
+## ✨ Features
+
+- JWT auth via **httpOnly cookies** (not localStorage) with short-lived
+  access tokens, rotating refresh tokens, and CSRF protection
+  (double-submit cookie)
+- Account lockout after repeated failed logins; rate limiting on all auth
+  endpoints
+- Orders: pagination, full-text product search, status/price filtering,
+  sorting, CSV export
+- Order status state machine (`pending → shipped → delivered`, or
+  `→ cancelled`) with a full status history, soft delete
+- Live analytics dashboard (revenue trend, order status breakdown) via
+  MongoDB aggregation + Recharts
+- **Real-time order updates** across tabs/devices via Socket.IO
+- Structured logging (Winston), request correlation IDs, Prometheus
+  `/metrics`, separate liveness/readiness probes, graceful shutdown
+- Integration test suite (Jest + Supertest + in-memory MongoDB)
+- Helm chart with HPA, PodDisruptionBudgets, NetworkPolicies, and secrets
+  sourced from a Kubernetes `Secret` — never from `values.yaml`
+- CI pipeline: tests → build → **vulnerability scan gates the push** →
+  deploy, with pinned action versions
 
 ## 📋 Prerequisites
 
 - Docker & Docker Compose
-- Kubernetes cluster (EKS, GKE, AKS, or local)
-- Helm 3.x
-- Terraform (for infrastructure)
 - Node.js 18+
-- MongoDB
+- Kubernetes cluster (EKS/GKE/AKS/local) + Helm 3.x, for the k8s path
+- Terraform, for the AWS infra path
 
-## 🚀 Quick Start
+## 🚀 Quick Start (local dev)
 
-### Local Development
-
-1. **Clone the repository:**
 ```bash
+git clone <this-repo>
 cd cloud-native-cicd-platform
+cp .env.example .env          # fill in JWT secrets, Grafana password
+docker compose up --build
 ```
 
-2. **Setup Backend:**
-```bash
-cd backend
-cp .env.example .env
-# Edit .env with your configuration
-npm install
-npm start
-```
+- Frontend: http://localhost:3000
+- Backend: http://localhost:5000 (`/health`, `/metrics`)
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3001
 
-3. **Setup Frontend:**
+Or run backend/frontend directly without Docker:
+
 ```bash
-cd frontend
-cp .env.example .env
-# Edit .env with API URL (http://localhost:3000)
-npm install
-npm start
+cd backend && cp .env.example .env && npm install && npm run dev
+cd frontend && cp .env.example .env && npm install && npm start
 ```
 
 ## 🔐 Environment Variables
 
-### Backend (.env)
-```
-PORT=3000
-MONGO_URL=mongodb://mongodb:27017/user-order-db
-JWT_SECRET=your-super-secret-key-change-in-production
-FRONTEND_URL=http://localhost:3000
-```
-
-### Frontend (.env)
-```
-REACT_APP_API_URL=http://localhost:3000
-```
-
-## 🐳 Docker Build
+See `backend/.env.example` and `frontend/.env.example`. **No real secrets
+are committed anywhere in this repo** — generate your own:
 
 ```bash
-# Backend
-docker build -t yourusername/backend-app:latest ./backend
-
-# Frontend
-docker build -t yourusername/frontend-app:latest ./frontend
+openssl rand -hex 64   # for JWT_ACCESS_SECRET / JWT_REFRESH_SECRET
 ```
 
 ## ☸️ Kubernetes Deployment
 
-### Prerequisites
-1. Update Helm values:
-```bash
-# Edit helm/user-order-platform/values.yaml
-# Change image repository and update environment variables
-```
-
-2. Create secrets:
 ```bash
 kubectl create secret generic backend-secrets \
-  --from-literal=jwt-secret='your-super-secret-jwt-key'
-```
+  --from-literal=mongo-url='mongodb+srv://<user>:<pass>@<cluster>/<db>' \
+  --from-literal=jwt-access-secret="$(openssl rand -hex 64)" \
+  --from-literal=jwt-refresh-secret="$(openssl rand -hex 64)"
 
-### Deploy with Helm
-```bash
-helm install user-order-platform ./helm/user-order-platform/
-```
-
-### Verify Deployment
-```bash
+helm install user-order-platform ./helm/user-order-platform
 kubectl get pods
 kubectl get svc
-kubectl logs -f deployment/backend
 ```
 
-## 🔄 CI/CD Pipeline
-
-The GitHub Actions workflow automates:
-1. Building Docker images for backend and frontend
-2. Pushing to Docker registry
-3. Running security scans with Trivy
-4. Uploading results to GitHub Security
-
-### Setup
-1. Add GitHub Secrets:
-   - `DOCKER_USERNAME`: Your Docker Hub username
-   - `DOCKER_PASSWORD`: Your Docker Hub token
-
-2. Workflow triggers on push to `main` branch
+See [`helm/user-order-platform/README.md`](./helm/user-order-platform/README.md).
 
 ## 🏗️ Infrastructure (Terraform)
 
-Deploy EKS cluster:
 ```bash
 cd terraform
 terraform init
@@ -115,69 +90,47 @@ terraform plan
 terraform apply
 ```
 
+Nodes run in private subnets behind a NAT gateway; restrict
+`cluster_endpoint_public_access_cidrs` to your own IP ranges before
+applying to a real environment.
+
 ## 📊 Monitoring
 
-### Prometheus
-Access metrics at: `http://prometheus:9090`
+- `GET /metrics` on the backend (Prometheus format, via `prom-client`)
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3001 (dashboard auto-loaded from
+  `monitoring/grafana/dashboards.json`)
 
-### Grafana
-Access dashboards at: `http://grafana:3000`
+## 🧪 Tests
 
-## 🔒 Security Features
-
-✅ JWT authentication with Bearer tokens
-✅ Password hashing with bcryptjs
-✅ CORS configuration
-✅ Network policies for pod-to-pod communication
-✅ Kubernetes health checks (liveness & readiness probes)
-✅ Environment-based secrets management
-✅ Docker image vulnerability scanning
-
-## 📁 Project Structure
-
-```
-.
-├── backend/              # Node.js Express API
-├── frontend/             # React web application
-├── helm/                 # Kubernetes Helm charts
-├── terraform/            # Infrastructure as Code
-├── monitoring/           # Prometheus & Grafana
-├── argocd/              # GitOps configuration
-└── .github/workflows/    # CI/CD pipelines
+```bash
+cd backend && npm test
 ```
 
-## 🐛 Troubleshooting
+## 📝 API Overview
 
-### Backend won't start
-- Ensure `JWT_SECRET` is set in environment
-- Check MongoDB connection with `MONGO_URL`
+### Auth
+- `POST /auth/register`, `POST /auth/login` — rate-limited, set httpOnly
+  cookies + return a `csrfToken`
+- `POST /auth/refresh` — rotates the refresh token
+- `POST /auth/logout`
+- `GET /auth/me`
 
-### Frontend can't connect to API
-- Verify `REACT_APP_API_URL` environment variable
-- Check CORS settings in backend
-
-### Kubernetes pods not ready
-- Check pod logs: `kubectl logs <pod-name>`
-- Verify health endpoints: `kubectl exec <pod-name> -- curl localhost:3000/health`
-
-## 📝 API Documentation
-
-### Authentication
-- **POST** `/auth/register` - Register new user
-- **POST** `/auth/login` - Login user
-
-### Orders (Protected - requires JWT)
-- **POST** `/orders` - Create order
-- **GET** `/orders` - Get user's orders
-- **PUT** `/orders/:id` - Update order status
-- **DELETE** `/orders/:id` - Delete order
+### Orders (all require auth; mutating requests require `X-CSRF-Token`)
+- `GET /orders?page=&limit=&status=&search=&sort=&minPrice=&maxPrice=`
+- `POST /orders`
+- `GET /orders/:id`
+- `PUT /orders/:id` — `{ status }`, validated against the allowed state
+  transitions
+- `DELETE /orders/:id` — soft delete
+- `GET /orders/stats/summary` — aggregated analytics
+- `GET /orders/export/csv`
 
 ## 🤝 Contributing
 
-1. Create feature branch
-2. Make changes
-3. Push to branch
-4. Create Pull Request
+1. Create a feature branch
+2. `npm test` in `backend/` before opening a PR
+3. Push and open a Pull Request — CI runs tests + a gated vulnerability scan
 
 ## 📄 License
 

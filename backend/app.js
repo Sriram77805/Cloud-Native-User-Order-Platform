@@ -1,69 +1,83 @@
 const express = require("express");
-const mongoose = require("mongoose");
+const helmet = require("helmet");
 const cors = require("cors");
-require("dotenv").config();
+const cookieParser = require("cookie-parser");
+const compression = require("compression");
+const mongoSanitize = require("express-mongo-sanitize");
+const hpp = require("hpp");
+const mongoose = require("mongoose");
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+const { frontendOrigins } = require("./config/env");
+const { state: dbState } = require("./config/db");
+const { register, metricsMiddleware } = require("./config/metrics");
+const requestId = require("./middleware/requestId");
+const { globalLimiter } = require("./middleware/rateLimiters");
+const errorHandler = require("./middleware/errorHandler");
 
-// Middleware
-app.use((req, res, next) => {
-  console.log('Incoming request origin header:', req.headers.origin);
-  next();
-});
+function createApp() {
+  const app = express();
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    callback(null, true);
-  },
-  credentials: true,
-};
-app.use(cors(corsOptions));
+  app.set("trust proxy", 1); // correct client IPs/rate-limiting behind k8s ingress/ELB
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+  app.use(helmet());
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        // Explicit allowlist instead of reflecting any Origin - required
+        // now that credentials:true is set (browsers reject wildcard "*"
+        // combined with credentials, and reflecting-any-origin defeats
+        // CORS entirely).
+        if (!origin || frontendOrigins.includes(origin)) return callback(null, true);
+        callback(new Error("Not allowed by CORS"));
+      },
+      credentials: true,
+      exposedHeaders: ["X-Request-Id"],
+    })
+  );
+  app.use(compression());
+  app.use(express.json({ limit: "100kb" }));
+  app.use(express.urlencoded({ extended: true, limit: "100kb" }));
+  app.use(cookieParser());
+  app.use(mongoSanitize()); // strips $/. operators from user input -> blocks NoSQL injection
+  app.use(hpp()); // guards against HTTP parameter pollution
+  app.use(requestId);
+  app.use(metricsMiddleware);
+  app.use(globalLimiter);
 
-let mongoConnected = false;
+  app.use("/auth", require("./routes/authRoutes"));
+  app.use("/orders", require("./routes/orderRoutes"));
 
-mongoose.connect(process.env.MONGO_URL, { 
-  connectTimeoutMS: 5000,
-  serverSelectionTimeoutMS: 5000,
-})
-.then(() => {
-  mongoConnected = true;
-  console.log('MongoDB connected successfully');
-})
-.catch(err => {
-  mongoConnected = false;
-  console.error('MongoDB connection error:', err.message);
-});
-mongoose.connection.once("open", () => {
-  console.log("Connected DB Name:", mongoose.connection.name);
-});
+  app.get("/health", (req, res) => {
+    const healthy = dbState.connected && mongoose.connection.readyState === 1;
+    res.status(healthy ? 200 : 503).json({
+      status: healthy ? "OK" : "DEGRADED",
+      db: healthy ? "connected" : "disconnected",
+      timestamp: new Date().toISOString(),
+      uptimeSeconds: Math.round(process.uptime()),
+    });
+  });
 
+  // Separate from /health: k8s readiness should pull a pod out of rotation
+  // when the DB is down, while liveness should NOT restart the pod for a
+  // transient DB blip. Keeping one endpoint conflates the two.
+  app.get("/health/live", (req, res) => res.json({ status: "OK" }));
+  app.get("/health/ready", (req, res) => {
+    const ready = dbState.connected;
+    res.status(ready ? 200 : 503).json({ status: ready ? "READY" : "NOT_READY" });
+  });
 
-// Routes
-app.use("/auth", require("./routes/authRoutes"));
-app.use("/orders", require("./routes/orderRoutes"));
+  app.get("/metrics", async (req, res) => {
+    res.setHeader("Content-Type", register.contentType);
+    res.send(await register.metrics());
+  });
 
-// Health check
-app.get("/health", (req, res) => {
-  res.json({ status: "OK", timestamp: new Date().toISOString() });
-});
+  app.use((req, res) => {
+    res.status(404).json({ error: "Route not found" });
+  });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: "Internal server error" });
-});
+  app.use(errorHandler);
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: "Route not found" });
-});
+  return app;
+}
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Backend server running on port ${PORT}`);
-});
+module.exports = createApp;

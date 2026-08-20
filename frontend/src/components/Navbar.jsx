@@ -1,12 +1,14 @@
-import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
-function Navbar({ onLogout }) {
+function Navbar() {
   const navigate = useNavigate();
+  const { logout, user } = useAuth();
 
-  const handleLogout = () => {
-    onLogout();
-    navigate('/login');
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
   };
 
   return (
@@ -18,7 +20,8 @@ function Navbar({ onLogout }) {
         <div className="flex gap-8 items-center">
           <Link to="/dashboard" className="text-white font-semibold hover:opacity-80 transition">Dashboard</Link>
           <Link to="/orders" className="text-white font-semibold hover:opacity-80 transition">Orders</Link>
-          <button 
+          {user?.email && <span className="text-white text-opacity-80 text-sm hidden md:inline">{user.email}</span>}
+          <button
             onClick={handleLogout}
             className="bg-white bg-opacity-20 text-white border-2 border-white px-6 py-2 rounded-lg font-semibold hover:bg-white hover:text-primary transition"
           >

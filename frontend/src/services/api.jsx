@@ -1,70 +1,74 @@
-import axios from 'axios';
+import axios from "axios";
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
-console.log('API_URL:', API_URL);
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const isDev = process.env.NODE_ENV === "development";
 
 const apiClient = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json'
-  }
+  withCredentials: true, // send/receive the httpOnly auth cookies
+  headers: { "Content-Type": "application/json" },
 });
 
-// Add token to requests
-apiClient.interceptors.request.use(
-  config => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    console.log('Request:', config.method.toUpperCase(), config.url);
-    return config;
-  },
-  error => Promise.reject(error)
-);
+// The CSRF token itself is not secret (it's readable JS-side by design -
+// see backend/middleware/csrf.js for the double-submit rationale) so it's
+// fine to keep in memory here rather than re-reading the cookie each time.
+let csrfToken = null;
+export const setCsrfToken = (token) => {
+  csrfToken = token;
+};
 
-// Response interceptor for debugging
+apiClient.interceptors.request.use((config) => {
+  if (csrfToken && ["post", "put", "patch", "delete"].includes(config.method)) {
+    config.headers["X-CSRF-Token"] = csrfToken;
+  }
+  if (isDev) console.debug("[api]", config.method?.toUpperCase(), config.url);
+  return config;
+});
+
+let refreshPromise = null;
+
 apiClient.interceptors.response.use(
-  response => {
-    console.log('Response:', response.status, response.config.url);
-    return response;
-  },
-  error => {
-    console.error('API Error:', error.response?.status, error.response?.data || error.message);
+  (response) => response,
+  async (error) => {
+    const { response, config } = error;
+
+    // On a 401 from an expired access token (not from /auth/login itself),
+    // try exactly one silent refresh, then replay the original request.
+    if (response?.status === 401 && !config._retried && !config.url.includes("/auth/")) {
+      config._retried = true;
+      try {
+        refreshPromise = refreshPromise || apiClient.post("/auth/refresh");
+        const { data } = await refreshPromise;
+        refreshPromise = null;
+        setCsrfToken(data.csrfToken);
+        return apiClient(config);
+      } catch (refreshError) {
+        refreshPromise = null;
+        window.dispatchEvent(new CustomEvent("auth:expired"));
+        return Promise.reject(refreshError);
+      }
+    }
     return Promise.reject(error);
   }
 );
 
-// Auth Services
 export const authService = {
-  register: async (email, password) => {
-    return apiClient.post('/auth/register', { email, password });
-  },
-  login: async (email, password) => {
-    return apiClient.post('/auth/login', { email, password });
-  }
+  register: (email, password) => apiClient.post("/auth/register", { email, password }),
+  login: (email, password) => apiClient.post("/auth/login", { email, password }),
+  logout: () => apiClient.post("/auth/logout"),
+  me: () => apiClient.get("/auth/me"),
 };
 
-// Order Services
 export const orderService = {
-  createOrder: async (product, quantity, price) => {
-    return apiClient.post('/orders', { product, quantity, price });
-  },
-  getOrders: async () => {
-    return apiClient.get('/orders');
-  },
-  updateOrder: async (id, status) => {
-    return apiClient.put(`/orders/${id}`, { status });
-  },
-  deleteOrder: async (id) => {
-    return apiClient.delete(`/orders/${id}`);
-  }
+  createOrder: (product, quantity, price) => apiClient.post("/orders", { product, quantity, price }),
+  getOrders: (params) => apiClient.get("/orders", { params }),
+  getOrder: (id) => apiClient.get(`/orders/${id}`),
+  updateStatus: (id, status) => apiClient.put(`/orders/${id}`, { status }),
+  deleteOrder: (id) => apiClient.delete(`/orders/${id}`),
+  getStats: () => apiClient.get("/orders/stats/summary"),
+  exportCsv: () => apiClient.get("/orders/export/csv", { responseType: "blob" }),
 };
 
-// Health check
-export const healthCheck = async () => {
-  return apiClient.get('/health');
-};
+export const healthCheck = () => apiClient.get("/health");
 
 export default apiClient;

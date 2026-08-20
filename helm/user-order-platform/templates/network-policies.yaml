@@ -14,21 +14,19 @@ spec:
         - podSelector:
             matchLabels:
               app: frontend
+        - namespaceSelector: {} # allow ingress-controller -> backend for the API host
       ports:
         - protocol: TCP
-          port: 3000
+          port: {{ .Values.backend.port }}
   egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              app: mongodb
-      ports:
-        - protocol: TCP
-          port: 27017
+    # MongoDB is an external Atlas cluster (see helm/README.md), not an
+    # in-cluster pod, so egress needs open internet access on 443 rather
+    # than a podSelector that never matched anything real.
     - to:
         - namespaceSelector: {}
-          podSelector: {}
       ports:
+        - protocol: TCP
+          port: 443
         - protocol: TCP
           port: 53
         - protocol: UDP
@@ -50,9 +48,7 @@ spec:
         - namespaceSelector: {}
       ports:
         - protocol: TCP
-          port: 80
-        - protocol: TCP
-          port: 443
+          port: {{ .Values.frontend.port }}
   egress:
     - to:
         - podSelector:
@@ -60,10 +56,9 @@ spec:
               app: backend
       ports:
         - protocol: TCP
-          port: 3000
+          port: {{ .Values.backend.port }}
     - to:
         - namespaceSelector: {}
-          podSelector: {}
       ports:
         - protocol: TCP
           port: 53

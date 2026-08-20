@@ -1,26 +1,29 @@
 const jwt = require("jsonwebtoken");
+const AppError = require("../utils/AppError");
+const catchAsync = require("../utils/catchAsync");
+const { jwtAccessSecret } = require("../config/env");
 
-const JWT_SECRET = process.env.JWT_SECRET;
+// Reads the access token from the httpOnly cookie set at login (preferred,
+// immune to XSS token theft), and falls back to an Authorization header so
+// non-browser clients (mobile apps, curl, CI smoke tests) can still work.
+module.exports = catchAsync(async (req, res, next) => {
+  const bearer = req.headers.authorization?.startsWith("Bearer ")
+    ? req.headers.authorization.split(" ")[1]
+    : null;
+  const token = req.cookies?.accessToken || bearer;
 
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET environment variable is required");
-}
+  if (!token) {
+    return next(new AppError("Authentication required", 401));
+  }
 
-module.exports = (req, res, next) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1]; // Handle "Bearer <token>" format
-    
-    if (!token) {
-      return res.status(403).json({ error: "No token provided" });
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
+    const decoded = jwt.verify(token, jwtAccessSecret);
+    req.user = { id: decoded.sub, role: decoded.role };
+    return next();
   } catch (error) {
     if (error.name === "TokenExpiredError") {
-      return res.status(401).json({ error: "Token expired" });
+      return next(new AppError("Access token expired", 401, { code: "TOKEN_EXPIRED" }));
     }
-    return res.status(403).json({ error: "Invalid token" });
+    return next(new AppError("Invalid token", 401));
   }
-};
+});

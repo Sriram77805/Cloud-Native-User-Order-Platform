@@ -1,122 +1,102 @@
-import React, { useState } from 'react';
-import { orderService } from '../services/api';
+import React, { useState } from "react";
+import { orderService } from "../services/api";
+import { useToast } from "../context/ToastContext";
+
+const STATUS_STYLES = {
+  pending: "bg-yellow-100 text-yellow-800",
+  shipped: "bg-blue-100 text-blue-800",
+  delivered: "bg-green-100 text-green-800",
+  cancelled: "bg-red-100 text-red-800",
+};
+
+// Mirrors backend/models/Order.js ALLOWED_TRANSITIONS - kept in sync so the
+// UI only offers actions the API will actually accept.
+const NEXT_STATUSES = {
+  pending: ["shipped", "cancelled"],
+  shipped: ["delivered", "cancelled"],
+  delivered: [],
+  cancelled: [],
+};
 
 function OrderList({ orders, onOrderUpdated, onOrderDeleted }) {
-  const [editingId, setEditingId] = useState(null);
-  const [editStatus, setEditStatus] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState(null);
+  const { pushToast } = useToast();
 
-  const handleUpdateStatus = async (orderId, currentStatus) => {
-    setEditingId(orderId);
-    setEditStatus(currentStatus);
-  };
-
-  const saveStatusUpdate = async (orderId) => {
-    setError('');
-    setLoading(true);
-
+  const handleStatusChange = async (order, status) => {
+    setBusyId(order._id);
     try {
-      const response = await orderService.updateOrder(orderId, editStatus);
-      onOrderUpdated(response.data.order);
-      setEditingId(null);
+      await orderService.updateStatus(order._id, status);
+      pushToast(`Order ${order.orderNumber} marked as ${status}`, "success");
+      onOrderUpdated();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to update order');
+      pushToast(err.response?.data?.error || "Failed to update order", "error");
     } finally {
-      setLoading(false);
+      setBusyId(null);
     }
   };
 
-  const handleDelete = async (orderId) => {
-    if (window.confirm('Are you sure you want to delete this order?')) {
-      try {
-        await orderService.deleteOrder(orderId);
-        onOrderDeleted(orderId);
-      } catch (err) {
-        setError(err.response?.data?.error || 'Failed to delete order');
-      }
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'shipped':
-        return 'bg-blue-100 text-blue-800';
-      case 'delivered':
-        return 'bg-green-100 text-green-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  const handleDelete = async (order) => {
+    if (!window.confirm(`Delete order ${order.orderNumber}?`)) return;
+    setBusyId(order._id);
+    try {
+      await orderService.deleteOrder(order._id);
+      pushToast(`Order ${order.orderNumber} deleted`, "info");
+      onOrderDeleted();
+    } catch (err) {
+      pushToast(err.response?.data?.error || "Failed to delete order", "error");
+    } finally {
+      setBusyId(null);
     }
   };
 
   return (
     <div className="max-w-7xl mx-auto">
-      {error && <div className="error-alert mb-6">{error}</div>}
-      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {orders.map(order => (
-          <div key={order._id} className="card hover:shadow-2xl transition transform hover:-translate-y-1">
-            <div className="flex justify-between items-start mb-4 pb-4 border-b-2 border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900 flex-1">{order.product}</h3>
-              <span className={`px-4 py-1 rounded-full text-sm font-semibold capitalize ${getStatusColor(order.status)}`}>
-                {order.status}
-              </span>
-            </div>
+        {orders.map((order) => {
+          const nextStatuses = NEXT_STATUSES[order.status] || [];
+          const busy = busyId === order._id;
+          const total = order.total ?? order.quantity * order.price;
 
-            <div className="space-y-2 mb-6">
-              <p className="text-gray-700"><span className="font-semibold text-gray-900">Quantity:</span> {order.quantity}</p>
-              <p className="text-gray-700"><span className="font-semibold text-gray-900">Price:</span> ${order.price.toFixed(2)}</p>
-              <p className="text-gray-700"><span className="font-semibold text-gray-900">Total:</span> ${(order.quantity * order.price).toFixed(2)}</p>
-              <p className="text-gray-700"><span className="font-semibold text-gray-900">Date:</span> {new Date(order.createdAt).toLocaleDateString()}</p>
-            </div>
-
-            {editingId === order._id ? (
-              <div className="flex flex-col gap-3">
-                <select 
-                  value={editStatus} 
-                  onChange={(e) => setEditStatus(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="shipped">Shipped</option>
-                  <option value="delivered">Delivered</option>
-                </select>
-                <div className="flex gap-3">
-                  <button 
-                    onClick={() => saveStatusUpdate(order._id)} 
-                    disabled={loading}
-                    className="flex-1 px-4 py-2 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? 'Saving...' : 'Save'}
-                  </button>
-                  <button 
-                    onClick={() => setEditingId(null)} 
-                    className="flex-1 px-4 py-2 bg-gray-400 text-white font-semibold rounded-lg hover:bg-gray-500 transition"
-                  >
-                    Cancel
-                  </button>
-                </div>
+          return (
+            <div key={order._id} className="card hover:shadow-2xl transition transform hover:-translate-y-1">
+              <div className="flex justify-between items-start mb-3">
+                <span className="text-xs font-mono text-gray-400">{order.orderNumber}</span>
+                <span className={`px-4 py-1 rounded-full text-sm font-semibold capitalize ${STATUS_STYLES[order.status]}`}>
+                  {order.status}
+                </span>
               </div>
-            ) : (
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => handleUpdateStatus(order._id, order.status)}
-                  className="flex-1 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition"
-                >
-                  Edit Status
-                </button>
-                <button 
-                  onClick={() => handleDelete(order._id)}
-                  className="flex-1 px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition"
+
+              <h3 className="text-xl font-bold text-gray-900 mb-4 pb-4 border-b-2 border-gray-200">{order.product}</h3>
+
+              <div className="space-y-2 mb-6">
+                <p className="text-gray-700"><span className="font-semibold text-gray-900">Quantity:</span> {order.quantity}</p>
+                <p className="text-gray-700"><span className="font-semibold text-gray-900">Price:</span> ${order.price.toFixed(2)}</p>
+                <p className="text-gray-700"><span className="font-semibold text-gray-900">Total:</span> ${total.toFixed(2)}</p>
+                <p className="text-gray-700"><span className="font-semibold text-gray-900">Date:</span> {new Date(order.createdAt).toLocaleDateString()}</p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {nextStatuses.map((next) => (
+                  <button
+                    key={next}
+                    disabled={busy}
+                    onClick={() => handleStatusChange(order, next)}
+                    className="flex-1 px-3 py-2 bg-blue-500 text-white text-sm font-semibold rounded-lg hover:bg-blue-600 transition disabled:opacity-50 capitalize"
+                  >
+                    Mark {next}
+                  </button>
+                ))}
+                <button
+                  disabled={busy}
+                  onClick={() => handleDelete(order)}
+                  className="flex-1 px-3 py-2 bg-red-500 text-white text-sm font-semibold rounded-lg hover:bg-red-600 transition disabled:opacity-50"
                 >
                   Delete
                 </button>
               </div>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

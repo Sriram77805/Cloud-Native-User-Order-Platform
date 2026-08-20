@@ -1,26 +1,25 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { authService } from '../services/api';
+import React, { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
-function Login({ onLogin }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     try {
-      const response = await authService.login(email, password);
-      onLogin(response.data.token);
-      navigate('/dashboard');
+      await login(email, password);
+      navigate("/dashboard");
     } catch (err) {
-      console.error('Login error:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Login failed. Please try again.';
+      const errorMessage = err.response?.data?.error || "Login failed. Please try again.";
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -29,12 +28,12 @@ function Login({ onLogin }) {
 
   return (
     <div className="flex justify-center items-center min-h-screen p-5 bg-gradient-main">
-      <div className="card w-full max-w-md animate-pulse-slow">
+      <div className="card w-full max-w-md">
         <h2 className="text-3xl font-bold text-gray-900 mb-2 text-center">Welcome Back</h2>
         <p className="text-center text-gray-600 mb-8 text-sm">Login to your account</p>
-        
+
         {error && <div className="error-alert mb-6">{error}</div>}
-        
+
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label htmlFor="email" className="block text-gray-900 font-semibold mb-2">Email</label>
@@ -63,7 +62,7 @@ function Login({ onLogin }) {
           </div>
 
           <button type="submit" disabled={loading} className="btn-primary w-full">
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? "Logging in..." : "Login"}
           </button>
         </form>
 
