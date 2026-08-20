@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-FROM node:18-alpine
+FROM node:22-alpine
 WORKDIR /app
 
 # Run as a non-root user instead of the container default root.
