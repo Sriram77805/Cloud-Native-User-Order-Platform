@@ -1,0 +1,55 @@
+backend:
+  image: docker.io/sriram77805/backend-app
+  tag: "latest" # overridden per-deploy by CI with the immutable git SHA
+  port: 5000
+  replicas: 2
+  minReplicas: 2
+  maxReplicas: 6
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+frontend:
+  image: docker.io/sriram77805/frontend-app
+  tag: "latest"
+  port: 8080
+  replicas: 2
+  minReplicas: 2
+  maxReplicas: 6
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  env:
+    REACT_APP_API_URL: https://api.user-order-platform.example.com
+
+ingress:
+  enabled: false
+  host: user-order-platform.example.com
+  apiHost: api.user-order-platform.example.com
+  tlsSecretName: user-order-platform-tls
+
+# Non-secret backend config. Anything sensitive (MONGO_URL, JWT secrets)
+# must be created out-of-band as a Kubernetes Secret named
+# "backend-secrets" - see helm/README.md - and is intentionally NOT
+# templatable from values.yaml so it can never be committed to git by
+# accident again.
+env:
+  FRONTEND_URL: "https://user-order-platform.example.com"
+  ACCESS_TOKEN_TTL: "15m"
+  REFRESH_TOKEN_TTL_DAYS: "7"
+
+# Name of the pre-created Secret holding MONGO_URL, JWT_ACCESS_SECRET,
+# JWT_REFRESH_SECRET. Create it with, e.g.:
+#   kubectl create secret generic backend-secrets \
+#     --from-literal=mongo-url='mongodb+srv://user:pass@cluster/db' \
+#     --from-literal=jwt-access-secret="$(openssl rand -hex 64)" \
+#     --from-literal=jwt-refresh-secret="$(openssl rand -hex 64)"
+secretName: backend-secrets

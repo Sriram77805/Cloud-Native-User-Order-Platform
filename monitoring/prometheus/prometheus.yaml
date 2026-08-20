@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  # In docker-compose, container_name resolves via Docker's embedded DNS.
+  - job_name: "backend"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["user-order-backend:5000"]
+
+  # In Kubernetes (via the Helm chart's Service), use the k8s Service name
+  # and its ClusterIP port instead:
+  #   targets: ["backend.default.svc.cluster.local:80"]
+
+  - job_name: "kubernetes-pods"
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      # Only scrape pods that opt in, to avoid noisy/failed scrapes against
+      # pods with no /metrics endpoint at all.
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: "true"
